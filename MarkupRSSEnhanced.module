@@ -8,7 +8,7 @@
  *
  * USAGE
  * -----
- * $rss = $modules->get("MarkupRSS");
+ * $rss = $modules->get("MarkupRSSEnhanced");
  * $rss->title = "Latest updates";
  * $rss->description = "The most recent pages updated on my site";
  * $items = $pages->find("limit=10, sort=-modified"); // or any pages you want
@@ -37,16 +37,18 @@ class MarkupRSSEnhanced extends WireData implements Module, ConfigurableModule {
 		'xsl' => '',
 		'css' => '',
 		'copyright' => '',
+        'ttl' => 60,
 		'width' => 400, // if an image is chosen for enclosure
 		'height' => 300, // if an image is chosen for enclosure
 		'boundingbox' => 0, // scale image till one of the edges reach the width or height
-		'ttl' => 60,
 		'itemTitleField' => 'title',
 		'itemDescriptionField' => 'summary',
 		'itemDescriptionLength' => 1024,
 		'itemDateField' => 'created',
 		'itemLinkField' => '',
 		'itemEnclosureField' => '', // used for a files, if array specified, the first one is taken.
+		'itemAuthorField' => '', // i.e. createdUser.title or leave blank to not use
+		'itemAuthorElement' => 'dc:creator', // may be 'dc:creator' or 'author'
 		'header' => 'Content-Type: application/xml; charset=utf-8;',
 		'feedPages' => array(),
 		);
@@ -57,9 +59,9 @@ class MarkupRSSEnhanced extends WireData implements Module, ConfigurableModule {
 	 */
 	public static function getModuleInfo() {
 		return array(
-			'title' => 'Markup RSS Feed enhanced',
-			'version' => 99,
-			'summary' => 'Renders an RSS feed. Given a PageArray, renders an RSS feed of them.',
+			'title' => __('Markup RSS Feed enhanced'),
+			'version' => 100,
+			'summary' => __('Renders an RSS feed. Given a PageArray, renders an RSS feed of them with optional file or image.'),
 			'permanent' => false,
 			'singular' => false,
 			'autoload' => false,
@@ -88,20 +90,22 @@ class MarkupRSSEnhanced extends WireData implements Module, ConfigurableModule {
 	 */
 	protected function renderHeader() {
 
-		$out = "<?xml version='1.0' encoding='UTF-8'?>\n";
+        $out = "<?xml version='1.0' encoding='utf-8' ?>\n";
+
 		if($this->xsl) $out .= "<?xml-stylesheet type='text/xsl' href='{$this->xsl}' ?>\n";
 		if($this->css) $out .= "<?xml-stylesheet type='text/css' href='{$this->css}' ?>\n";
 
 		if(!$this->url) $this->url = $this->page->httpUrl;
 
-			$out .= "<rss version='2.0'>\n" .
+		$out .= "<rss version='2.0' xmlns:dc='http://purl.org/dc/elements/1.1/'>\n" .
 				"<channel>\n" .
-					"\t<title>{$this->title}</title>\n" .
-					"\t<link>{$this->url}</link>\n" .
-					"\t<description>{$this->description}</description>\n" .
-					"\t<pubDate>" . date(DATE_RSS) . "</pubDate>\n";
-				if($this->copyright) $out .= "\t<copyright>{$this->copyright}</copyright>\n";
-				if($this->ttl) $out .= "\t<ttl>{$this->ttl}</ttl>\n";
+				"\t<title>{$this->title}</title>\n" .
+				"\t<link>{$this->url}</link>\n" .
+				"\t<description>{$this->description}</description>\n" .
+				"\t<pubDate>" . date(DATE_RSS) . "</pubDate>\n";
+
+        if($this->copyright) $out .= "\t<copyright>{$this->copyright}</copyright>\n";
+        if($this->ttl) $out .= "\t<ttl>{$this->ttl}</ttl>\n";
 
 		return $out;
 	}
@@ -124,7 +128,18 @@ class MarkupRSSEnhanced extends WireData implements Module, ConfigurableModule {
 			$pubDate = '';
 		}
 
+		$author = '';
+		if($this->itemAuthorField) {
+			$author = $page->getUnformatted($this->itemAuthorField);
+			if(strlen($author)) {
+				$author = $this->wire('sanitizer')->entities($author);
+				$author = "\t\t<$this->itemAuthorElement>$author</$this->itemAuthorElement>\n";
+			} else $author = '';
+		}
+
+
 		$enclosure = $this->enclosure($page);
+
 		$link = $this->link($page);
 		$guid = $this->link($page, 'guid');
 
@@ -137,6 +152,7 @@ class MarkupRSSEnhanced extends WireData implements Module, ConfigurableModule {
 			"\t\t<description><![CDATA[$description]]></description>\n" .
 			$enclosure .
 			$pubDate .
+            $author .
 			$link .
 			$guid .
 			"\t</item>\n";
@@ -220,50 +236,43 @@ class MarkupRSSEnhanced extends WireData implements Module, ConfigurableModule {
 	 */
 	protected function enclosure(Page $page) {
 
-		$enclosure = '';
+        $name = $this->itemEnclosureField;
+        if(!$page->template->hasField($name)) return '';
+        $fieldObject = $this->fields->get($name); // field object
+        $field = $page->$name;
+        $fieldType = $fieldObject->type;
+        $maxFiles = $fieldObject->maxFiles;
 
-		if(!$this->itemEnclosureField || !$page->template->hasField($this->itemEnclosureField)) return $enclosure;
-
-		$string = $this->itemEnclosureField;
-		$field = $page->$string;
-		$count = count($field);
-
-		if($count === 0) {
-			$field = Null;
-		} else if ($count > 1) {
+		if(count($field) === 0) {
+			return '';
+		} else if ($maxFiles != 1) {
 			$field = $field->first();
 		}
 
-		if($field && strlen($field->filename)) {
+        // get mimetype
+        $info = finfo_open(FILEINFO_MIME_TYPE);
+        $mime = finfo_file($info, $field->filename);
+        finfo_close($info);
 
-			$options = array('sharpening' => 'none');
+        if($field instanceof Pageimage) {
 
-			$finfo = finfo_open(FILEINFO_MIME_TYPE);
-			$type = finfo_file($finfo, $field->filename);
-			finfo_close($finfo);
+            $width = (int) $this->width;
+            $height = (int) $this->height;
 
-			if($field instanceof Pageimage) {
+            if ($width && $height && $this->boundingbox) {
+                $ratiox = $width / $field->width;
+                $ratioy = $height / $field->height;
 
-				$width = (int) $this->width;
-				$height = (int) $this->height;
+                $width = min($ratiox, $ratioy) * $field->width;
+                $height = min($ratiox, $ratioy) * $field->height;
 
-				if ($width && $height && $this->boundingbox) {
-					$ratiox = $width / $field->width;
-					$ratioy = $height / $field->height;
+                $field = $field->size($width, $height);
+            } else if($width || $height) {
+                $field = $field->size($width, $height);
+            }
+        }
 
-					$width = min($ratiox, $ratioy) * $field->width;
-					$height = min($ratiox, $ratioy) * $field->height;
-
-					$field = $field->size($width, $height, $options);
-				} else if($width || $height) {
-					$field = $field->size($width, $height, $options);
-				}
-			}
-
-			$enclosure = "\t\t<enclosure url='{$field->httpUrl}' length='{$field->filesize}' type='$type' />\n";
-		}
-
-		return $enclosure;
+        return "\t\t<enclosure url='{$field->httpUrl}' length='{$field->filesize}' type='$mime' />\n";
 	}
 
 	/**
@@ -289,105 +298,127 @@ class MarkupRSSEnhanced extends WireData implements Module, ConfigurableModule {
 	 */
 	static public function getModuleConfigInputfields(array $data) {
 
-		$inputfields = new InputfieldWrapper();
-		$inputfields->description =
-			"Select the default options for any given feed. Each of these may be overridden in the API, " .
-			"so the options you select below should be considered defaults, unless you only have 1 feed. " .
-			"If you only need to support 1 feed, then you will not need to override any of these in the API.";
+		$wrapper = new InputfieldWrapper();
+        $modules = wire('modules');
 
-		foreach(self::$defaultConfigData as $key => $value) {
-			if(!isset($data[$key])) $data[$key] = $value;
-		}
+        foreach(self::$defaultConfigData as $key => $value) {
+            if(!isset($data[$key])) $data[$key] = $value;
+        }
 
-		$f = wire('modules')->get('InputfieldText');
+        $f = $modules->get('InputfieldMarkup');
+        $f->label = __("Information");
+		$f->description =
+			__("Select the default options for any given feed. Each of these may be overridden in the API,") . " " .
+			__("so the options you select below should be considered defaults, unless you only have 1 feed.") . " " .
+			__("If you only need to support 1 feed, then you will not need to override any of these in the API.");
+        $f->value = "<p class='description'>" .
+            '// example' . "<br>" .
+            '$rss = $modules->get("MarkupRSSEnhanced");' . "<br>" .
+            '$rss->title = "Latest updates";' . "<br>" .
+            '$rss->description = "The most recent pages updated on my site";' . "<br>" .
+            '$items = $pages->find("limit=10, sort=-modified"); // or any pages you want' . "<br>" .
+            '$rss->render($items);' . "</p>";
+
+
+        $wrapper->add($f);
+
+        $fs = $modules->get('InputfieldFieldset');
+        $fs->label = __("Channel Elements");
+        $fs->description = __("The channel element describes the RSS feed and gives global information about the feed.");
+
+		$f = $modules->get('InputfieldText');
 		$f->attr('name', 'title');
 		$f->attr('value', $data['title']);
-		$f->label = "Default Feed Title";
-		$inputfields->add($f);
+		$f->label = __("Default Feed Title");
+		$fs->add($f);
 
-		$f = wire('modules')->get('InputfieldURL');
+		$f = $modules->get('InputfieldURL');
 		$f->attr('name', 'url');
 		$f->attr('value', $data['url']);
-		$f->label = "Default Feed URL";
-		$f->description = "The URL on your site that serves as a feed index. May also be left blank.";
-		$inputfields->add($f);
+		$f->label = __("Default Feed URL");
+		$f->description = __("The URL on your site that serves as a feed index. May also be left blank.");
+		$fs->add($f);
 
-		$f = wire('modules')->get('InputfieldText');
+		$f = $modules->get('InputfieldText');
 		$f->attr('name', 'description');
 		$f->attr('value', $data['description']);
-		$f->label = "Default Feed Description";
-		$f->description = "The default description for a feed. May also be left blank.";
-		$inputfields->add($f);
+		$f->label = __("Default Feed Description");
+		$f->description = __("The default description for a feed. May also be left blank.");
+		$fs->add($f);
 
-		$f = wire('modules')->get('InputfieldURL');
+		$f = $modules->get('InputfieldURL');
 		$f->attr('name', 'xsl');
 		$f->attr('value', $data['xsl']);
-		$f->label = "Default Link to XSL Stylesheet";
-		$f->description = "Optional URL/link to an XSL stylesheet. Default is none.";
-		$inputfields->add($f);
+		$f->label = __("Default Link to XSL Stylesheet");
+		$f->description = __("Optional URL/link to an XSL stylesheet. Default is none.");
+		$fs->add($f);
 
-		$f = wire('modules')->get('InputfieldURL');
+		$f = $modules->get('InputfieldURL');
 		$f->attr('name', 'css');
 		$f->attr('value', $data['css']);
-		$f->label = "Default Link to CSS Stylesheet";
-		$f->description = "Optional URL/link to a CSS stylesheet. Default is none.";
-		$inputfields->add($f);
+		$f->label = __("Default Link to CSS Stylesheet");
+		$f->description = __("Optional URL/link to a CSS stylesheet. Default is none.");
+		$fs->add($f);
 
-		$f = wire('modules')->get('InputfieldText');
+		$f = $modules->get('InputfieldText');
 		$f->attr('name', 'copyright');
 		$f->attr('value', $data['copyright']);
-		$f->label = "Default Feed Copyright";
-		$f->description = "The default copyright statement for a feed. Default is blank.";
-		$inputfields->add($f);
+		$f->label = __("Default Feed Copyright");
+		$f->description = __("The default copyright statement for a feed. Default is blank.");
+		$fs->add($f);
 
-		$f = wire('modules')->get('InputfieldInteger');
+		$f = $modules->get('InputfieldInteger');
 		$f->attr('name', 'ttl');
 		$f->attr('value', (int) $data['ttl']);
-		$f->label = "Default Feed TTL";
-		$f->description = "TTL stands for \"time to live\" in minutes. It indicates how long a channel can be cached before refreshing from the source. Default is 60.";
-		$inputfields->add($f);
+		$f->label = __("Default Feed TTL");
+		$f->description = __("TTL stands for \"time to live\" in minutes. It indicates how long a channel can be cached before refreshing from the source. Default is 60.");
+		$fs->add($f);
+        $wrapper->add($fs);
 
-		$f1 = wire('modules')->get('InputfieldSelect');
+        $fs = $modules->get('InputfieldFieldset');
+        $fs->label = __("Item Elements");
+        $fs->description = __("An item represent a page");
+
+		$f1 = $modules->get('InputfieldSelect');
 		$f1->attr('name', 'itemTitleField');
 		$f1->attr('value', $data['itemTitleField']);
-		$f1->label = "Default Feed Item Title Field";
-		$f1->description = "The default field to use as an individual feed item's title.";
+		$f1->label = __("Default Feed Item Title Field");
+		$f1->description = __("The default field to use as an individual feed item's title.");
 
-		$f2 = wire('modules')->get('InputfieldSelect');
+		$f2 = $modules->get('InputfieldSelect');
 		$f2->attr('name', 'itemDescriptionField');
 		$f2->attr('value', $data['itemDescriptionField']);
-		$f2->label = "Default Feed Item Description Field";
-		$f2->description = "The default field to use as an individual feed item's description (typically a summary or body field).";
+		$f2->label = __("Default Feed Item Description Field");
+		$f2->description = __("The default field to use as an individual feed item's description (typically a summary or body field).");
 
-		$f2a = wire('modules')->get('InputfieldInteger');
+		$f2a = $modules->get('InputfieldInteger');
 		$f2a->attr('name', 'itemDescriptionLength');
 		$f2a->attr('value', (int) $data['itemDescriptionLength']);
-		$f2a->label = "Maxmum Characters for Item Description Field";
-		$f2a->description = "The item description will be truncated to be no longer than the max length provided. Specify '0' for no max length. When there is no max length, markup tags will not be stripped.";
+		$f2a->label = __("Maxmum Characters for Item Description Field");
+		$f2a->description = __("The item description will be truncated to be no longer than the max length provided. Specify '0' for no max length. When there is no max length), markup tags will not be stripped.");
 
-		$f3 = wire('modules')->get('InputfieldSelect');
+		$f3 = $modules->get('InputfieldSelect');
 		$f3->attr('name', 'itemDateField');
 		$f3->attr('value', $data['itemDateField']);
-		$f3->label = "Default Feed Item Date Field";
-		$f3->description = "The default field to use as an individual feed item's date.";
+		$f3->label = __("Default Feed Item Date Field");
+		$f3->description = __("The default field to use as an individual feed item's date.");
 		$f3->addOption('created');
 		$f3->addOption('modified');
 
-		$f4 = wire('modules')->get('InputfieldSelect');
+		$f4 = $modules->get('InputfieldSelect');
 		$f4->attr('name', 'itemLinkField');
 		$f4->attr('value', $data['itemLinkField']);
-		$f4->label = "Default Feed Item Link Field";
-		$f4->description = "The field to use as an individual feed item's link. Leave blank to use the de Page as link.";
+		$f4->label = __("Default Feed Item Link Field");
+		$f4->description = __("The field to use as an individual feed item's link. Leave blank to use the de Page as link.");
 
-		$f5 = wire('modules')->get('InputfieldSelect');
+		$f5 = $modules->get('InputfieldSelect');
 		$f5->attr('name', 'itemEnclosureField');
 		$f5->attr('value', $data['itemEnclosureField']);
-		$f5->label = "Default Feed Item File Field (enclosure)";
-		$f5->description = "The default field to use as an individual feed item's enclosure . (If the field contains an array of Pagesfiles, the first one will be used.)";
+		$f5->label = __("Default Feed Item File Field (enclosure)");
+		$f5->description = __("The default field to use as an individual feed item's enclosure . (If the field contains an array of Pagesfiles, the first one will be used.)");
 		$f5->notes = "The image or file is added to item enclosure tag. Image sizing only occurs if the field is an instance of Pageimage.";
 
 		foreach(wire('fields') as $field) {
-
 			// FieldtypeURL needs to be called before FieldtypeText
 			if($field->type instanceof FieldtypeURL) {
 				$f4->addOption($field->name);
@@ -401,37 +432,40 @@ class MarkupRSSEnhanced extends WireData implements Module, ConfigurableModule {
 			}
 		}
 
-		$inputfields->add($f1);
-		$inputfields->add($f2);
-		$inputfields->add($f2a);
-		$inputfields->add($f3);
-		$inputfields->add($f4);
-		$inputfields->add($f5);
+		$fs->add($f1);
+		$fs->add($f2);
+		$fs->add($f2a);
+		$fs->add($f3);
+		$fs->add($f4);
+		$fs->add($f5);
 
-		$f = wire('modules')->get('InputfieldInteger');
+		$f = $modules->get('InputfieldInteger');
 		$f->attr('name', 'width');
 		$f->attr('value', (int) $data['width']);
-		$f->label = "Default width for image enclosure";
-		$f->description = "The width of the image if the enclosure is an image.";
+		$f->label = __("Width for image enclosure");
+		$f->description = __("The width of the image if the enclosure is an image.");
 		$f->notes = "Set 0 for proportional to width.";
-		$inputfields->add($f);
+		$fs->add($f);
 
-		$f = wire('modules')->get('InputfieldInteger');
+		$f = $modules->get('InputfieldInteger');
 		$f->attr('name', 'height');
 		$f->attr('value', (int) $data['height']);
-		$f->label = "Default height for image enclosure";
-		$f->description = "The width of the image if the enclosure is an image.";
+		$f->label = __("Height for image enclosure");
+		$f->description = __("The width of the image if the enclosure is an image.");
 		$f->notes = "Set 0 for proportional to height.";
-		$inputfields->add($f);
+		$fs->add($f);
 
-		$f = wire('modules')->get('InputfieldCheckbox');
+		$f = $modules->get('InputfieldCheckbox');
 		$f->attr('name', 'boundingbox');
 		$f->attr('value', 1);
 		$f->attr('checked', (int) $data['boundingbox'] ? 'checked' : null );
-		$f->label = "Bounding box";
-		$f->description = "Scale the image until one side reaches the goal dimension, specified by width and height. ";
-		$inputfields->add($f);
+		$f->label = __("Bounding box");
+		$f->description =
+            __("Scale the image until one side reaches the goal dimension, specified by width and height.") . " " .
+            __("Ideal for logo's as it prevent cropping.");
+		$fs->add($f);
+        $wrapper->add($fs);
 
-		return $inputfields;
+		return $wrapper;
 	}
 }
