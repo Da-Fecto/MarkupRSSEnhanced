@@ -346,20 +346,6 @@ class MarkupRSSEnhanced extends WireData implements Module, ConfigurableModule {
         $f->description = __("The default description for a feed. May also be left blank.");
         $fs->add($f);
 
-        $f = $modules->get('InputfieldURL');
-        $f->attr('name', 'xsl');
-        $f->attr('value', $data['xsl']);
-        $f->label = __("Default Link to XSL Stylesheet");
-        $f->description = __("Optional URL/link to an XSL stylesheet. Default is none.");
-        $fs->add($f);
-
-        $f = $modules->get('InputfieldURL');
-        $f->attr('name', 'css');
-        $f->attr('value', $data['css']);
-        $f->label = __("Default Link to CSS Stylesheet");
-        $f->description = __("Optional URL/link to a CSS stylesheet. Default is none.");
-        $fs->add($f);
-
         $f = $modules->get('InputfieldText');
         $f->attr('name', 'copyright');
         $f->attr('value', $data['copyright']);
@@ -463,6 +449,26 @@ class MarkupRSSEnhanced extends WireData implements Module, ConfigurableModule {
         $f->description =
             __("Scale the image until one side reaches the goal dimension, specified by width and height.") . " " .
             __("Ideal for logo's as it prevent cropping.");
+        $fs->add($f);
+        $wrapper->add($fs);
+
+        $fs = $modules->get('InputfieldFieldset');
+        $fs->label = __("Prettify the feed");
+        $fs->notes = __("Not supported in all clients.");
+
+        $f = $modules->get('InputfieldURL');
+        $f->attr('name', 'xsl');
+        $f->attr('value', $data['xsl']);
+        $f->label = __("Default Link to XSL Stylesheet");
+        $f->description = __("Optional URL/link to an XSL stylesheet. Default is none.");
+        $fs->add($f);
+
+        $f = $modules->get('InputfieldURL');
+        $f->attr('name', 'css');
+        $f->attr('value', $data['css']);
+        $f->label = __("Default Link to CSS Stylesheet");
+        $f->description = __("Optional URL/link to a CSS stylesheet. Default is none.");
+        $fs->add($f);
         $fs->add($f);
         $wrapper->add($fs);
 
