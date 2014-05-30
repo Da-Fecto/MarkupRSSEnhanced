@@ -22,8 +22,9 @@ The channel element describes the RSS feed. There are 3 required channel element
 
 1. **title** $rss->title
 2. **link** $rss->url
-3. **description** $rss->description<br>
+3. **description** $rss->description
 
+here's a list of all options:
 
     $rss->title = '';        // (string) Title of the feed.
     $rss->url = '';          // (string) URL of the website this feed lives. Example: http://www.your-domain.com/
