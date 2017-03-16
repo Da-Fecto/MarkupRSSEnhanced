@@ -27,8 +27,8 @@
  * http://www.ryancramer.com
  *
  */
-
-class MarkupRSSEnhanced extends WireData implements Module, ConfigurableModule {
+class MarkupRSSEnhanced extends WireData implements Module, ConfigurableModule
+{
 
     protected static $defaultConfigData = array(
         'title' => 'Untitled RSS Feed',
@@ -51,13 +51,14 @@ class MarkupRSSEnhanced extends WireData implements Module, ConfigurableModule {
         'itemAuthorElement' => 'dc:creator', // may be 'dc:creator' or 'author'
         'header' => 'Content-Type: application/xml; charset=utf-8;',
         'feedPages' => array(),
-        );
+    );
 
     /**
      * Return general info about the module for ProcessWire
      *
      */
-    public static function getModuleInfo() {
+    public static function getModuleInfo()
+    {
         return array(
             'title' => __('Markup RSS Feed enhanced'),
             'version' => 100,
@@ -65,15 +66,16 @@ class MarkupRSSEnhanced extends WireData implements Module, ConfigurableModule {
             'permanent' => false,
             'singular' => false,
             'autoload' => false,
-            );
+        );
     }
 
     /**
      * Set the default config data
      *
      */
-    public function __construct() {
-        foreach(self::$defaultConfigData as $key => $value) {
+    public function __construct()
+    {
+        foreach (self::$defaultConfigData as $key => $value) {
             $this->set($key, $value);
         }
     }
@@ -82,30 +84,34 @@ class MarkupRSSEnhanced extends WireData implements Module, ConfigurableModule {
      * Necessary to fulfill Module interface, even though not using it currently
      *
      */
-    public function init() { }
+    public function init()
+    {
+    }
 
     /**
      * Render RSS header
      *
      */
-    protected function renderHeader() {
+    protected function renderHeader()
+    {
 
         $out = "<?xml version='1.0' encoding='utf-8' ?>\n";
 
-        if($this->xsl) $out .= "<?xml-stylesheet type='text/xsl' href='{$this->xsl}' ?>\n";
-        if($this->css) $out .= "<?xml-stylesheet type='text/css' href='{$this->css}' ?>\n";
+        if ($this->xsl) $out .= "<?xml-stylesheet type='text/xsl' href='{$this->xsl}' ?>\n";
+        if ($this->css) $out .= "<?xml-stylesheet type='text/css' href='{$this->css}' ?>\n";
 
-        if(!$this->url) $this->url = $this->page->httpUrl;
+        if (!$this->url) $this->url = $this->page->httpUrl;
 
-        $out .= "<rss version='2.0' xmlns:dc='http://purl.org/dc/elements/1.1/'>\n" .
-                "<channel>\n" .
-                "\t<title>{$this->title}</title>\n" .
-                "\t<link>{$this->url}</link>\n" .
-                "\t<description>{$this->description}</description>\n" .
-                "\t<pubDate>" . date(DATE_RSS) . "</pubDate>\n";
+        $out .= "<rss version='2.0' xmlns:dc='http://purl.org/dc/elements/1.1/' xmlns:atom=\"http://www.w3.org/2005/Atom\">\n" .
+            "<channel>\n" .
+            "\t<title>{$this->title}</title>\n" .
+            "\t<link>{$this->url}</link>\n" .
+            "\t<atom:link href='$this->url' rel='self' type='application/rss+xml' />" .
+            "\t<description>{$this->description}</description>\n" .
+            "\t<pubDate>" . date(DATE_RSS) . "</pubDate>\n";
 
-        if($this->copyright) $out .= "\t<copyright>{$this->copyright}</copyright>\n";
-        if($this->ttl) $out .= "\t<ttl>{$this->ttl}</ttl>\n";
+        if ($this->copyright) $out .= "\t<copyright>{$this->copyright}</copyright>\n";
+        if ($this->ttl) $out .= "\t<ttl>{$this->ttl}</ttl>\n";
 
         return $out;
     }
@@ -114,25 +120,26 @@ class MarkupRSSEnhanced extends WireData implements Module, ConfigurableModule {
      * Render individual RSS item
      *
      */
-    protected function renderItem(Page $page) {
+    protected function renderItem(Page $page)
+    {
 
         $title = strip_tags($page->get($this->itemTitleField));
-        if(empty($title)) return '';
+        if (empty($title)) return '';
         $title = html_entity_decode($title, ENT_QUOTES, 'UTF-8');
         $title = htmlspecialchars($title, ENT_QUOTES, 'UTF-8');
         $title = str_replace('&#039;', '&apos;', $title);
 
-        if($this->itemDateField && ($ts = $page->getUnformatted($this->itemDateField))) {
+        if ($this->itemDateField && ($ts = $page->getUnformatted($this->itemDateField))) {
             $pubDate = "\t\t<pubDate>" . date(DATE_RSS, $ts) . "</pubDate>\n";
         } else {
             $pubDate = '';
         }
 
         $author = '';
-        if($this->itemAuthorField) {
+        if ($this->itemAuthorField) {
             $author = $page->getUnformatted($this->itemAuthorField);
-            if(strlen($author)) {
-                $author = $this->wire('sanitizer')->entities($author);
+            if (strlen($author)) {
+                $author = $this->wire('sanitizer')->markupToLine($author);
                 $author = "\t\t<$this->itemAuthorElement>$author</$this->itemAuthorElement>\n";
             } else $author = '';
         }
@@ -144,10 +151,10 @@ class MarkupRSSEnhanced extends WireData implements Module, ConfigurableModule {
         $guid = $this->link($page, 'guid');
 
         $description = $page->get($this->itemDescriptionField);
-        if(is_null($description)) $description = '';
+        if (is_null($description)) $description = '';
         $description = $this->truncateDescription(trim($description));
 
-        $out =     "\t<item>\n" .
+        $out = "\t<item>\n" .
             "\t\t<title>$title</title>\n" .
             "\t\t<description><![CDATA[$description]]></description>\n" .
             $enclosure .
@@ -164,18 +171,19 @@ class MarkupRSSEnhanced extends WireData implements Module, ConfigurableModule {
      * Render the feed and return it
      *
      */
-    public function renderFeed(PageArray $feedPages = null) {
+    public function renderFeed(PageArray $feedPages = null)
+    {
 
-        if(!is_null($feedPages)) $this->feedPages = $feedPages;
+        if (!is_null($feedPages)) $this->feedPages = $feedPages;
 
         $out = $this->renderHeader();
 
-        foreach($this->feedPages as $page) {
-            if(!$page->viewable()) continue;
+        foreach ($this->feedPages as $page) {
+            if (!$page->viewable()) continue;
             $out .= $this->renderItem($page);
-                }
+        }
 
-                $out .= "</channel>\n</rss>\n";
+        $out .= "</channel>\n</rss>\n";
 
         return $out;
     }
@@ -184,7 +192,8 @@ class MarkupRSSEnhanced extends WireData implements Module, ConfigurableModule {
      * Render the feed and echo it (with proper http header)
      *
      */
-    public function render(PageArray $feedPages = null) {
+    public function render(PageArray $feedPages = null)
+    {
         header($this->header);
         echo $this->renderFeed($feedPages);
         return true;
@@ -194,15 +203,16 @@ class MarkupRSSEnhanced extends WireData implements Module, ConfigurableModule {
      * Truncate the description to a specific length and then truncate to avoid splitting any words.
      *
      */
-    protected function truncateDescription($str) {
+    protected function truncateDescription($str)
+    {
 
         $maxlen = $this->itemDescriptionLength;
-        if(!$maxlen) return $str;
+        if (!$maxlen) return $str;
 
         // note: tags are not stripped if itemDescriptionLength == 0
         $str = strip_tags($str);
 
-        if(strlen($str) < $maxlen) return $str;
+        if (strlen($str) < $maxlen) return $str;
 
         $str = trim(substr($str, 0, $maxlen));
 
@@ -210,10 +220,10 @@ class MarkupRSSEnhanced extends WireData implements Module, ConfigurableModule {
         $boundaries = array('. ', '? ', '! ', ', ', '; ', '-');
         $bestPos = 0;
 
-        foreach($boundaries as $boundary) {
-            if(($pos = strrpos($str, $boundary)) !== false) {
+        foreach ($boundaries as $boundary) {
+            if (($pos = strrpos($str, $boundary)) !== false) {
                 // find the boundary that is furthest in string
-                if($pos > $bestPos) $bestPos = $pos;
+                if ($pos > $bestPos) $bestPos = $pos;
             }
         }
 
@@ -221,11 +231,11 @@ class MarkupRSSEnhanced extends WireData implements Module, ConfigurableModule {
         // if the last punctuation is further away then 1/4th the total length, then we'll
         // truncate to the last space. Otherwise, we'll truncate to the last punctuation.
         $spacePos = strrpos($str, ' ');
-        if($spacePos > $bestPos && (($spacePos - ($maxlen / 4)) > $bestPos)) $bestPos = $spacePos;
+        if ($spacePos > $bestPos && (($spacePos - ($maxlen / 4)) > $bestPos)) $bestPos = $spacePos;
 
-        if(!$bestPos) $bestPos = $maxlen;
+        if (!$bestPos) $bestPos = $maxlen;
 
-        return trim(substr($str, 0, $bestPos+1));
+        return trim(substr($str, 0, $bestPos + 1));
     }
 
     /**
@@ -234,16 +244,17 @@ class MarkupRSSEnhanced extends WireData implements Module, ConfigurableModule {
      * says what its type is, a standard MIME type.
      *
      */
-    protected function enclosure(Page $page) {
+    protected function enclosure(Page $page)
+    {
 
         $name = $this->itemEnclosureField;
-        if(!$page->template->hasField($name)) return '';
+        if (!$page->template->hasField($name)) return '';
         $fieldObject = $this->fields->get($name); // field object
         $field = $page->$name;
         $fieldType = $fieldObject->type;
         $maxFiles = $fieldObject->maxFiles;
 
-        if(count($field) === 0) {
+        if (count($field) === 0) {
             return '';
         } else if ($maxFiles != 1) {
             $field = $field->first();
@@ -254,10 +265,10 @@ class MarkupRSSEnhanced extends WireData implements Module, ConfigurableModule {
         $mime = finfo_file($info, $field->filename);
         finfo_close($info);
 
-        if($field instanceof Pageimage) {
+        if ($field instanceof Pageimage) {
 
-            $width = (int) $this->width;
-            $height = (int) $this->height;
+            $width = (int)$this->width;
+            $height = (int)$this->height;
 
             if ($width && $height && $this->boundingbox) {
                 $ratiox = $width / $field->width;
@@ -267,7 +278,7 @@ class MarkupRSSEnhanced extends WireData implements Module, ConfigurableModule {
                 $height = min($ratiox, $ratioy) * $field->height;
 
                 $field = $field->size($width, $height);
-            } else if($width || $height) {
+            } else if ($width || $height) {
                 $field = $field->size($width, $height);
             }
         }
@@ -280,14 +291,15 @@ class MarkupRSSEnhanced extends WireData implements Module, ConfigurableModule {
      * is used for the item link. For the guid item, we stil use the PageUrl.
      *
      */
-    protected function link(Page $page, $tag = 'link') {
+    protected function link(Page $page, $tag = 'link')
+    {
 
-        if(!$this->itemLinkField) return "\t\t<{$tag}>{$page->httpUrl}</{$tag}>\n";
+        if (!$this->itemLinkField) return "\t\t<{$tag}>{$page->httpUrl}</{$tag}>\n";
 
         $field = $this->itemLinkField;
         $url = $this->sanitizer->url($page->$field);
         $url = str_replace("&", '&amp;', $url);
-        if(strlen($url)) return "\t\t<{$tag}>{$url}</{$tag}>\n";
+        if (strlen($url)) return "\t\t<{$tag}>{$url}</{$tag}>\n";
 
         return '';
     }
@@ -296,13 +308,14 @@ class MarkupRSSEnhanced extends WireData implements Module, ConfigurableModule {
      * Provide fields for configuring this module
      *
      */
-    static public function getModuleConfigInputfields(array $data) {
+    static public function getModuleConfigInputfields(array $data)
+    {
 
         $wrapper = new InputfieldWrapper();
         $modules = wire('modules');
 
-        foreach(self::$defaultConfigData as $key => $value) {
-            if(!isset($data[$key])) $data[$key] = $value;
+        foreach (self::$defaultConfigData as $key => $value) {
+            if (!isset($data[$key])) $data[$key] = $value;
         }
 
         $f = $modules->get('InputfieldMarkup');
@@ -355,7 +368,7 @@ class MarkupRSSEnhanced extends WireData implements Module, ConfigurableModule {
 
         $f = $modules->get('InputfieldInteger');
         $f->attr('name', 'ttl');
-        $f->attr('value', (int) $data['ttl']);
+        $f->attr('value', (int)$data['ttl']);
         $f->label = __("Default Feed TTL");
         $f->description = __("TTL stands for \"time to live\" in minutes. It indicates how long a channel can be cached before refreshing from the source. Default is 60.");
         $fs->add($f);
@@ -379,7 +392,7 @@ class MarkupRSSEnhanced extends WireData implements Module, ConfigurableModule {
 
         $f2a = $modules->get('InputfieldInteger');
         $f2a->attr('name', 'itemDescriptionLength');
-        $f2a->attr('value', (int) $data['itemDescriptionLength']);
+        $f2a->attr('value', (int)$data['itemDescriptionLength']);
         $f2a->label = __("Maxmum Characters for Item Description Field");
         $f2a->description = __("The item description will be truncated to be no longer than the max length provided. Specify '0' for no max length. When there is no max length), markup tags will not be stripped.");
 
@@ -404,16 +417,16 @@ class MarkupRSSEnhanced extends WireData implements Module, ConfigurableModule {
         $f5->description = __("The default field to use as an individual feed item's enclosure . (If the field contains an array of Pagesfiles, the first one will be used.)");
         $f5->notes = "The image or file is added to item enclosure tag. Image sizing only occurs if the field is an instance of Pageimage.";
 
-        foreach(wire('fields') as $field) {
+        foreach (wire('fields') as $field) {
             // FieldtypeURL needs to be called before FieldtypeText
-            if($field->type instanceof FieldtypeURL) {
+            if ($field->type instanceof FieldtypeURL) {
                 $f4->addOption($field->name);
-            } else if($field->type instanceof FieldtypeText) {
+            } else if ($field->type instanceof FieldtypeText) {
                 $f1->addOption($field->name);
                 $f2->addOption($field->name);
-            } else if($field->type instanceof FieldtypeDate) {
+            } else if ($field->type instanceof FieldtypeDate) {
                 $f3->addOption($field->name);
-            } else if($field->type instanceof FieldtypeFile) {
+            } else if ($field->type instanceof FieldtypeFile) {
                 $f5->addOption($field->name);
             }
         }
@@ -427,7 +440,7 @@ class MarkupRSSEnhanced extends WireData implements Module, ConfigurableModule {
 
         $f = $modules->get('InputfieldInteger');
         $f->attr('name', 'width');
-        $f->attr('value', (int) $data['width']);
+        $f->attr('value', (int)$data['width']);
         $f->label = __("Width for image enclosure");
         $f->description = __("The width of the image if the enclosure is an image.");
         $f->notes = "Set 0 for proportional to width.";
@@ -435,7 +448,7 @@ class MarkupRSSEnhanced extends WireData implements Module, ConfigurableModule {
 
         $f = $modules->get('InputfieldInteger');
         $f->attr('name', 'height');
-        $f->attr('value', (int) $data['height']);
+        $f->attr('value', (int)$data['height']);
         $f->label = __("Height for image enclosure");
         $f->description = __("The width of the image if the enclosure is an image.");
         $f->notes = "Set 0 for proportional to height.";
@@ -444,7 +457,7 @@ class MarkupRSSEnhanced extends WireData implements Module, ConfigurableModule {
         $f = $modules->get('InputfieldCheckbox');
         $f->attr('name', 'boundingbox');
         $f->attr('value', 1);
-        $f->attr('checked', (int) $data['boundingbox'] ? 'checked' : null );
+        $f->attr('checked', (int)$data['boundingbox'] ? 'checked' : null);
         $f->label = __("Bounding box");
         $f->description =
             __("Scale the image until one side reaches the goal dimension, specified by width and height.") . " " .
