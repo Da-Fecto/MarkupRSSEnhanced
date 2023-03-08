@@ -243,7 +243,7 @@ class MarkupRSSEnhanced extends WireData implements Module, ConfigurableModule {
         $fieldType = $fieldObject->type;
         $maxFiles = $fieldObject->maxFiles;
 
-        if(count($field) === 0) {
+        if($field == null) {
             return '';
         } else if ($maxFiles != 1) {
             $field = $field->first();
